@@ -1,0 +1,117 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    container_name: postgres
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: always
+
+  airflow-webserver:
+    build: .
+    container_name: airflow-webserver
+    depends_on:
+      - postgres
+    environment:
+      - _AIRFLOW_WWW_USER_USERNAME=admin
+      - _AIRFLOW_WWW_USER_PASSWORD=admin
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__WEBSERVER__SECRET_KEY=super-secreto-123
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=us-east-1
+
+      - SNOWFLAKE_ACCOUNT=tbc41550.us-east-1
+      - SNOWFLAKE_USER=JUANFRANCO
+      - SNOWFLAKE_PASSWORD=Socojuanca246*
+      - SNOWFLAKE_DATABASE=AMAZON_DB
+      - SNOWFLAKE_SCHEMA=RAW
+      - SNOWFLAKE_WAREHOUSE=COMPUTE_WH
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./spark_jobs:/opt/spark_jobs
+      - ./data:/opt/airflow/data
+    ports:
+      - "8080:8080"
+    command: webserver
+    restart: always
+
+  airflow-scheduler:
+    build: .
+    container_name: airflow-scheduler
+    user: root
+    depends_on:
+      - airflow-webserver
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__WEBSERVER__SECRET_KEY=super-secreto-123
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=us-east-1
+
+      - SNOWFLAKE_ACCOUNT=tbc41550.us-east-1
+      - SNOWFLAKE_USER=JUANFRANCO
+      - SNOWFLAKE_PASSWORD=Socojuanca246*
+      - SNOWFLAKE_DATABASE=AMAZON_DB
+      - SNOWFLAKE_SCHEMA=RAW
+      - SNOWFLAKE_WAREHOUSE=COMPUTE_WH
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./spark_jobs:/opt/spark_jobs
+      - ./data:/opt/airflow/data
+    command: scheduler
+    restart: always
+
+  spark:
+    image: apache/spark:3.5.0
+    container_name: spark
+    user: root
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_REGION=us-east-1
+
+      - SNOWFLAKE_ACCOUNT=tbc41550.us-east-1
+      - SNOWFLAKE_USER=JUANFRANCO
+      - SNOWFLAKE_PASSWORD=Socojuanca246*
+      - SNOWFLAKE_DATABASE=AMAZON_DB
+      - SNOWFLAKE_SCHEMA=RAW
+      - SNOWFLAKE_WAREHOUSE=COMPUTE_WH
+    ports:
+      - "7077:7077"
+      - "8081:8080"
+    # Este comando es el secreto para que no se reinicie:
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    volumes:
+      - ./spark_jobs:/opt/spark_jobs
+      - ./data:/opt/airflow/data
+    restart: always
+
+  spark-worker:
+    image: apache/spark:3.5.0
+    container_name: spark-worker
+    depends_on:
+      - spark
+    user: root
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark:7077
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark:7077
+    ports:
+      - "8082:8081"

@@ -1,0 +1,22 @@
+.env
+__pycache__/
+*.pyc
+*.log
+.airflow/
+*.db
+*.sqlite
+airflow.db
+
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Docker
+*.env
+
+# Data
+*.csv
